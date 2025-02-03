@@ -35,6 +35,17 @@ class StudipSync(object):
         if self.media_destination_dir:
             os.makedirs(self.media_destination_dir, exist_ok=True)
 
+     def short_course_name(name):
+        # Remove all non-alphanumeric symbols
+        clean_name = re.sub(r'[^a-zA-ZÄÖÜ0-9\s]', '', name)
+        # pattern: <number> <type letter> <course name (max 2)> <optional digit>
+        pattern = re.compile(r'(\d+)\s([A-ZÄÖÜ])\S*\s(([A-Z]+[a-z]* ?){1,2})\D*(\d?).*')
+        match = pattern.match(clean_name)
+        if match:
+            return f"{match.group(1)} {match.group(2)} {match.group(3)}{match.group(5)}".strip()
+        else:
+            return False
+
     def sync(self, sync_fully=False, sync_recent=False):
         PLUGINS.hook("hook_start")
 
@@ -59,6 +70,10 @@ class StudipSync(object):
                 print("Downloading course list failed!")
                 print(e)
                 return 1
+
+            for course in courses:
+                name = short_course_name(course["save_as"])
+                course["save_as"] = name if name else course["save_as"]
 
             if sync_recent:
                 print("Syncing only the most recent semester!")

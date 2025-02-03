@@ -1,3 +1,9 @@
+# Fork differences
+
+- **truncated course Names** for obnoxiously long course names and a nicer overview
+- ToDo: **ignore list for courses**
+- ToDo: **only update files when the Stud.IP date is more recent, not when changed locally**
+
 # studip-sync
 
 [![studip-sync](https://snapcraft.io/studip-sync/badge.svg)](https://snapcraft.io/studip-sync)

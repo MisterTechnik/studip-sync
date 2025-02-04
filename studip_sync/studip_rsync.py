@@ -5,6 +5,7 @@ import tempfile
 import time
 import unicodedata
 import string
+import re
 
 from studip_sync.arg_parser import ARGS
 from studip_sync.config import CONFIG
@@ -22,6 +23,7 @@ class StudIPRSync(object):
         self.workdir = tempfile.mkdtemp(prefix="studip-sync")
         self.files_destination_dir = CONFIG.files_destination
         self.media_destination_dir = CONFIG.media_destination
+        self.ignore_courses = CONFIG.ignore_courses
 
         if self.files_destination_dir:
             os.makedirs(self.files_destination_dir, exist_ok=True)
@@ -41,6 +43,12 @@ class StudIPRSync(object):
                 print(e)
                 return 1
 
+            print("Changing semester visibility...")
+            if CONFIG.semester is not None:
+                session.set_semester(CONFIG.semester)
+            elif CONFIG.use_new_file_structure:
+                session.set_semester("all")
+
             print("Downloading course list...")
 
             try:
@@ -56,6 +64,10 @@ class StudIPRSync(object):
             status_code = 0
             for i in range(0, len(courses)):
                 course = courses[i]
+                if course["course_id"] in self.ignore_courses or \
+                    any(re.match(ignore.replace('*', '.*'), course["save_as"]) for ignore in self.ignore_courses):
+                    print(f"Skipping course \"{course['save_as']}\" as it is in the ignore list.")
+                    continue
                 print("{}) {}: {}".format(i + 1, course["semester"], course["save_as"]))
 
                 course_save_as = get_course_save_as(course)
@@ -86,6 +98,9 @@ class StudIPRSync(object):
                     except MissingFeatureError:
                         # Ignore if there is no media
                         pass
+                    except MissingPermissionFolderError:
+                        # Ignore if there are no permissions
+                        pass
                     except DownloadError as e:
                         print("\tDownload of media failed: " + str(e))
                         status_code = 2
@@ -96,6 +111,9 @@ class StudIPRSync(object):
                             raise e
                         else:
                             status_code = 2
+            
+            print("Changing semester visibility back to current...")
+            session.set_semester("current")
 
         if self.files_destination_dir and status_code == 0:
             CONFIG.update_last_sync(int(time.time()))
@@ -114,6 +132,22 @@ class StudIPRSync(object):
 
 UNICODE_NORMALIZE_MODE = "NFKC"
 
+def clean_name(name):
+    # Remove all disallowed characters for Windows, Mac and Linux
+    return re.sub(r'[\\:*?"<>|]', '', name.replace("/", "--"))
+
+def short_course_name(name):
+    # Remove all non-alphanumeric symbols
+    #clean_name = re.sub(r'[^a-zA-ZÄÖÜ0-9\s]', '', name)
+    # pattern: <number> <type letter> <course name (max 2)> <optional digit>
+    pattern = re.compile(r'(\d+)\s([A-ZÄÖÜ])\S*\s(([A-Z]+[a-zäöüß]* ?){1,2})\D*(\d?).*')
+    match = pattern.match(clean_name(name))
+    if match:
+        res = f"{match.group(1)} {match.group(2)} {match.group(3)}{match.group(5)}".strip()
+        print("Result: "+res)
+        return res
+    else:
+        return clean_name(name)
 
 def check_and_cleanup_form_data(form_data_files, form_data_folders, use_api):
     form_data_files_new = []
@@ -140,7 +174,7 @@ def check_and_cleanup_form_data(form_data_files, form_data_folders, use_api):
                 continue
 
             new_file_data = {
-                "name": unicodedata.normalize(UNICODE_NORMALIZE_MODE, form_data["name"]).replace("/", "--"),
+                "name": clean_name(unicodedata.normalize(UNICODE_NORMALIZE_MODE, form_data["name"])),
                 "id": form_id,
                 "size": int(form_data["size"]),
                 "chdate": int(form_data["chdate"])
@@ -165,7 +199,7 @@ def check_and_cleanup_form_data(form_data_files, form_data_folders, use_api):
                 raise ValueError("id is not hexadecimal")
 
             form_data_folders_new.append({
-                "name": unicodedata.normalize(UNICODE_NORMALIZE_MODE, form_data["name"]).replace("/", "--"),
+                "name": clean_name(unicodedata.normalize(UNICODE_NORMALIZE_MODE, form_data["name"])),
                 "id": form_id
             })
         except Exception as e:
@@ -211,12 +245,12 @@ def is_file_new(file, file_path):
 
 def get_course_save_as(course):
     if CONFIG.use_new_file_structure:
-        save_as_semester = course["semester"].replace("/", "--")
+        save_as_semester = clean_name(course["semester"])
         save_as_semester = "{} - {}".format(course["semester_id"], save_as_semester)
 
-        return os.path.join(save_as_semester, course["save_as"])
+        return os.path.join(save_as_semester, short_course_name(course["save_as"]))
     else:
-        return course["save_as"]
+        return short_course_name(course["save_as"])
 
 
 class CourseRSync:
@@ -259,6 +293,9 @@ class CourseRSync:
                                                                          form_data_folders, self.use_api)
 
         for file_data in form_data_files:
+            if file_data["download_url"] is None:
+                log("Skipped file that can't be downloaded: {}".format(file_data["name"]))
+                continue
             folder_absolute = os.path.join(self.root_folder, folder_path_relative)
             file_path = os.path.join(folder_absolute, file_data["name"])
             if is_file_new(file_data, file_path):

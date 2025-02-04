@@ -40,7 +40,7 @@ class URL(object):
         return urllib.parse.urljoin(self.base_url, rel_url)
 
     def login_page(self):
-        return self.__relative_url("")
+        return self.__relative_url("index.php?again=yes")
 
     def files_main(self):
         return self.__relative_url("dispatch.php/course/files")
@@ -71,7 +71,10 @@ class URL(object):
 
     def files_api_download(self, file_id):
         return self.__relative_url("api.php/file/{}/download".format(file_id))
-
+    def semsesters_api(self):
+        return self.__relative_url("api.php/semesters")
+    def set_semester(self, semester_id):
+        return self.__relative_url("dispatch.php/my_courses/set_semester?sem_select={}".format(semester_id))
 
 class Session(object):
 
@@ -157,7 +160,6 @@ class Session(object):
             with open(tempfile, "wb") as file:
                 shutil.copyfileobj(response.raw, file)
 
-
     def download_file_api(self, file_id, tempfile):
         download_url = self.url.files_api_download(file_id)
         
@@ -202,6 +204,21 @@ class Session(object):
             res = json.loads(response.text)
             
             return res["file_refs"], res["subfolders"]
+        
+    def get_semesters_from_api(self, title):
+        with self.session.get(self.url.semsesters_api()) as response:
+            if not response.ok:
+                raise DownloadError("Cannot access semesters")
+            semesters = json.loads(response.text)
+            for semester in semesters["collection"]:
+                if semester["title"] == title:
+                    return semester["id"]
+            return None
+                
+    def set_semester(self, semester_id):
+        with self.session.get(self.url.set_semester(semester_id)) as response:
+            if not response.ok:
+                raise DownloadError("Setting semester failed")
 
     def download_media(self, course_id, media_workdir, course_save_as):
         params = {"cid": course_id}
@@ -212,6 +229,8 @@ class Session(object):
             if not response.ok:
                 if response.status_code == 500 and "not found" in response.text:
                     raise MissingFeatureError("This course has no media")
+                elif response.status_code == 403 and "Zugriff verweigert" in response.text:
+                    raise MissingPermissionFolderError("Missing permission to access mediacast list")
                 else:
                     raise DownloadError("Cannot access mediacast list page")
 

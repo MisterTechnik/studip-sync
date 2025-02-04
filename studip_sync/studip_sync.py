@@ -11,7 +11,8 @@ from datetime import datetime
 from studip_sync.config import CONFIG
 from studip_sync.logins import LoginError
 from studip_sync.plugins.plugins import PLUGINS
-from studip_sync.session import Session, DownloadError, MissingFeatureError
+from studip_sync.session import Session, DownloadError, MissingFeatureError, \
+    MissingPermissionFolderError
 from studip_sync.parsers import ParserError
 
 
@@ -28,6 +29,7 @@ class StudipSync(object):
         self.extract_dir = os.path.join(self.workdir, "extracted")
         self.files_destination_dir = CONFIG.files_destination
         self.media_destination_dir = CONFIG.media_destination
+        self.ignore_courses = CONFIG.ignore_courses
 
         os.makedirs(self.download_dir)
         os.makedirs(self.extract_dir)
@@ -35,17 +37,6 @@ class StudipSync(object):
             os.makedirs(self.files_destination_dir, exist_ok=True)
         if self.media_destination_dir:
             os.makedirs(self.media_destination_dir, exist_ok=True)
-
-    def short_course_name(name):
-        # Remove all non-alphanumeric symbols
-        clean_name = re.sub(r'[^a-zA-ZÄÖÜ0-9\s]', '', name)
-        # pattern: <number> <type letter> <course name (max 2)> <optional digit>
-        pattern = re.compile(r'(\d+)\s([A-ZÄÖÜ])\S*\s(([A-Z]+[a-z]* ?){1,2})\D*(\d?).*')
-        match = pattern.match(clean_name)
-        if match:
-            return f"{match.group(1)} {match.group(2)} {match.group(3)}{match.group(5)}".strip()
-        else:
-            return False
 
     def sync(self, sync_fully=False, sync_recent=False):
         PLUGINS.hook("hook_start")
@@ -62,6 +53,12 @@ class StudipSync(object):
                 print("Login failed!")
                 print(e)
                 return 1
+            
+            print("Changing semester visibility...")
+            if CONFIG.semester is not None:
+                session.set_semester(CONFIG.semester)
+            elif CONFIG.use_new_file_structure:
+                session.set_semester("all")
 
             print("Downloading course list...")
 
@@ -71,11 +68,6 @@ class StudipSync(object):
                 print("Downloading course list failed!")
                 print(e)
                 return 1
-            
-            # shorten all course names
-            for course in courses:
-                name = self.short_course_name(course["save_as"])
-                course["save_as"] = name if name else course["save_as"]
 
             if sync_recent:
                 print("Syncing only the most recent semester!")
@@ -83,6 +75,11 @@ class StudipSync(object):
             status_code = 0
             for i in range(0, len(courses)):
                 course = courses[i]
+                course["save_as"] = short_course_name(course["save_as"])
+                if course["course_id"] in self.ignore_courses or \
+                    any(re.match(ignore.replace('*', '.*'), course["save_as"]) for ignore in self.ignore_courses):
+                    print(f"Skipping course \"{course['save_as']}\" as it is in the ignore list.")
+                    continue
                 print("{}) {}: {}".format(i+1, course["semester"], course["save_as"]))
 
                 if self.files_destination_dir:
@@ -114,6 +111,9 @@ class StudipSync(object):
                     except MissingFeatureError:
                         # Ignore if there is no media
                         pass
+                    except MissingPermissionFolderError:
+                        # Ignore if there are no permissions
+                        pass
                     except DownloadError as e:
                         print("\tDownload of media failed: " + str(e))
                         status_code = 2
@@ -123,6 +123,9 @@ class StudipSync(object):
                             raise e
                         else:
                             status_code = 2
+            
+            print("Changing semester visibility back to current...")
+            session.set_semester("current")
 
         if self.files_destination_dir:
             print("Synchronizing with existing files...")
@@ -142,6 +145,20 @@ class StudipSync(object):
     def __exit__(self, exc_type, exc_value, traceback):
         self.cleanup()
 
+def clean_name(name):
+    # Remove all disallowed characters for Windows, Mac and Linux
+    return re.sub(r'[\\:*?"<>|]', '', name.replace("/", "--"))
+
+def short_course_name(name):
+    # Remove all non-alphanumeric symbols
+    #clean_name = re.sub(r'[^a-zA-ZÄÖÜ0-9\s]', '', name)
+    # pattern: <number> <type letter> <course name (max 2)> <optional digit>
+    pattern = re.compile(r'(\d+)\s([A-ZÄÖÜ])\S*\s(([A-Z]+[a-zäöüß]* ?){1,2})\D*(\d?).*')
+    match = pattern.match(clean_name(name))
+    if match:
+        return f"{match.group(1)} {match.group(2)} {match.group(3)}{match.group(5)}".strip()
+    else:
+        return False
 
 # pylint: disable=too-few-public-methods
 class RsyncWrapper(object):

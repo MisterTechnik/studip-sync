@@ -167,6 +167,22 @@ class Config(JSONConfig):
 
         return self.config.get("use_new_file_structure", False)
 
+    @property
+    def ignore_courses(self):
+        if not self.config:
+            return []
+
+        return self.config.get("ignore_courses", [])
+    
+    @property
+    def semester(self):
+        if self.args.semester is not None:
+            return self.args.semester
+        elif not self.config:
+            return None
+
+        return self.config.get("semester", None)
+
 
 try:
     CONFIG = Config()

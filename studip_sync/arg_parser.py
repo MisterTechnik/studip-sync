@@ -30,6 +30,10 @@ def parse_args():
 
     parser.add_argument("--disable-api", action="store_true",
                         help="don't use the StudIP API endpoint to download and discover files")
+    
+    parser.add_argument("-s", "--semester", metavar="SEMESTER", default=None,
+                        help="set the semester to synchronize, e.g. 'WS 2024/25' or 'all', "
+                        "'current', 'last', 'future', 'lastandnext' or 'lastandbefore'")
 
     # PLUGINS
     parser.add_argument("--enable-plugin", metavar="PLUGIN",

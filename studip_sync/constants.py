@@ -11,7 +11,9 @@ LOGIN_PRESETS = [
                 auth_type="shibboleth", auth_data={
                     "login_url": "https://studip.uni-passau.de/studip/index.php?again=yes&sso=shib",
                     "sso_post_url": "https://studip.uni-passau.de/Shibboleth.sso/SAML2/POST"
-                })
+                }),
+    LoginPreset(name="University of Rostock", base_url="https://studip.uni-rostock.de",
+                auth_type="general", auth_data={})
 ]
 AUTHENTICATION_TYPES = {"general": GeneralLogin,
                         "shibboleth": ShibbolethLogin}

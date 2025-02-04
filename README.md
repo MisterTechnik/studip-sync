@@ -1,7 +1,9 @@
 # Fork differences
 
 - **truncated course Names** for obnoxiously long course names and a nicer overview
-- ToDo: **ignore list for courses**
+- **Windows and Mac file compatibility** by removing \:*?"<>| and leading/trailing spaces from file names
+- **ignore list for courses**
+- **select semester** to sync
 - ToDo: **only update files when the Stud.IP date is more recent, not when changed locally**
 
 # studip-sync

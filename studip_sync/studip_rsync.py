@@ -134,7 +134,7 @@ UNICODE_NORMALIZE_MODE = "NFKC"
 
 def clean_name(name):
     # Remove all disallowed characters for Windows, Mac and Linux
-    return re.sub(r'[\\:*?"<>|]', '', name.replace("/", "--"))
+    return re.sub(r'[\\:*?"<>|]', '', name.replace("/", "--")).strip()
 
 def short_course_name(name):
     # Remove all non-alphanumeric symbols

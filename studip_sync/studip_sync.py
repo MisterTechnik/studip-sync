@@ -5,6 +5,7 @@ import zipfile
 import glob
 import subprocess
 import time
+import re
 from datetime import datetime
 
 from studip_sync.config import CONFIG
@@ -35,7 +36,7 @@ class StudipSync(object):
         if self.media_destination_dir:
             os.makedirs(self.media_destination_dir, exist_ok=True)
 
-     def short_course_name(name):
+    def short_course_name(name):
         # Remove all non-alphanumeric symbols
         clean_name = re.sub(r'[^a-zA-ZÄÖÜ0-9\s]', '', name)
         # pattern: <number> <type letter> <course name (max 2)> <optional digit>
@@ -70,9 +71,10 @@ class StudipSync(object):
                 print("Downloading course list failed!")
                 print(e)
                 return 1
-
+            
+            # shorten all course names
             for course in courses:
-                name = short_course_name(course["save_as"])
+                name = self.short_course_name(course["save_as"])
                 course["save_as"] = name if name else course["save_as"]
 
             if sync_recent:

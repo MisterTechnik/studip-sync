@@ -56,7 +56,14 @@ class StudipSync(object):
             
             print("Changing semester visibility...")
             if CONFIG.semester is not None:
-                session.set_semester(CONFIG.semester)
+                if CONFIG.semester in ["all", "current", "last", "future", "lastandnext", "lastandbefore"]:
+                    session.set_semester(CONFIG.semester)
+                else:
+                    semester_id = session.get_semester_id(CONFIG.semester)
+                    if semester_id is None:
+                        print("Semester not found!")
+                        return 1
+                    session.set_semester()
             elif CONFIG.use_new_file_structure:
                 session.set_semester("all")
 
